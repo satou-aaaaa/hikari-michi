@@ -1,5 +1,6 @@
 // ひかり道の検査。部屋の作り方（いちばん少ない鏡の数を、別に書いた光のたどり方と全部の置き方で数え直す）・3問の組み方（1年分）・置く/回す/戻す/ヒント・続きから・上級・部屋帳・実績・記録・スマホ幅・PWA。
 // 使い方: node qa/run.mjs   失敗があれば終了コード 1。結果は qa-report/report.md。
+import { spawnSync } from "node:child_process";
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -80,6 +81,7 @@ function anyWith(p, k) {
 }
 
 const html = readFileSync(path.join(root, "index.html"), "utf8");
+const htmlOwn = html.replace(/<!-- a11y:begin[\s\S]*?<!-- a11y:end -->/, ""); // 共通部品（見やすさの設定）を除いたゲームの中身
 check("終えた回を消すのは同じ回のときだけ・0時を過ぎたホームの「今日」のボタンは描き直す（2026-11-04 CodeRabbit）", /c\.date === run\.date && c\.id === run\.id\) s2\.runs\[MODE\] = null/.test(html) && /\$\("go-d"\)\.onclick = \(\) => \(k !== todayKey\(\) \? home\(\)/.test(html));
 check("別のタブで今日の分を終えたあと、古い画面から今日・上級をもう一度始めない（2026-11-04 CodeRabbit）", /\(mode === "d" && s\.days\[k\]\) \|\| \(mode === "h" && s\.hdays\[k\]\)\) return;/.test(html));
 check("README の URL のすぐ後ろに全角の字を続けない（Link check が URL の一部と読む。2026-11-04）", !/https?:\/\/[\x21-\x7e]*[^\x00-\x7f]/.test(readFileSync(new URL("../README.md", import.meta.url), "utf8").replace(/\]\(https?:\/\/[^)\s]+\)/g, "").replace(/<https?:\/\/[^>\s]+>/g, "")));
@@ -91,7 +93,7 @@ check("別のタブで先に進んだ（同じ回数の）置き方を、古い�
 const ext = [...html.matchAll(/(?:src|href)="(https?:[^"]+)"/g)].map((m) => m[1]).filter((u) => !/^https:\/\/fonts\.googleapis\.com(\/|$)|^https:\/\/ko-fi\.com\/satouaaaaa$/.test(u));
 check("外から読むのは文字（Google Fonts）だけ。スクリプト・広告・解析を入れない", ext.length === 0, ext.join(","));
 check("CSP で通信先を自分だけにしている", /connect-src 'self'/.test(html) && !/connect-src[^;"]*https/.test(html));
-check("Math.random は練習の問題の種だけ（今日の3問・上級は日付の種）", (html.match(/Math\.random/g) || []).length === 1 && /mode === "h" \? hardList\(k\) : \[\{ lv: opt, seed: Math\.floor\(Math\.random\(\)/.test(html) && !/Math\.random/.test(readFileSync(path.join(root, "gen.js"), "utf8")));
+check("Math.random は練習の問題の種だけ（今日の3問・上級は日付の種）", (htmlOwn.match(/Math\.random/g) || []).length === 1 && /mode === "h" \? hardList\(k\) : \[\{ lv: opt, seed: Math\.floor\(Math\.random\(\)/.test(htmlOwn) && !/Math\.random/.test(readFileSync(path.join(root, "gen.js"), "utf8")));
 check("画面にお笑いの言葉を入れない（本物っぽく）", !/お笑い|ギャグ|ボケ|ツッコミ|なんでやねん|（うそ）/.test(html));
 { const og = (k) => (html.match(new RegExp(`<meta (?:property|name)="${k}" content="([^"]+)"`)) || [])[1] || "";
   const png = readFileSync(path.join(root, "og.png"));
@@ -204,6 +206,8 @@ try {
   await page.click("#hint");
   n1 = await curT(page);
   check("ヒント2回目でもう1枚、ヒントはもう押せない", n1.hints === 2 && n1.hint.length === 2 && (await page.locator("#hint[disabled]").count()) === 1);
+  { const dash = await page.evaluate(() => { const h = document.documentElement, had = h.classList.contains("a11y-cvd"), ln = () => document.querySelector("#board .mirror.hint line"); h.classList.remove("a11y-cvd"); const off = ln() ? getComputedStyle(ln()).strokeDasharray : "x"; h.classList.add("a11y-cvd"); const on = ln() ? getComputedStyle(ln()).strokeDasharray : "none"; if (!had) h.classList.remove("a11y-cvd"); return { n: document.querySelectorAll("#board .mirror.hint").length, off, on }; });
+    check("ヒントの鏡に印（hint）が付き、色の見分けを助ける設定では破線になる（色だけで分けない。2026-11-05 CodeRabbit）", dash.n === 2 && dash.off === "none" && dash.on !== "none", JSON.stringify(dash)); }
   await page.reload(); await page.click("#go-d");
   n1 = await curT(page);
   check("途中で閉じても、置いた鏡・ヒントはそのまま（続きから）", n1.hints === 2 && n1.hint.length === 2 && nPut(n1.put) === 2 && (await page.textContent("#left")).includes("ヒント 2"));
@@ -377,6 +381,11 @@ try {
   if (browser) await browser.close();
 }
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
+{ // 見やすさ・読みやすさ・偏り（shared-workflows template/qa/a11y.mjs の写し。routines/game-dev.md「だれでも遊べるように」）
+  const a = spawnSync(process.execPath, [path.join(root, "qa", "a11y.mjs")], { encoding: "utf8", env: process.env });
+  check("見やすさ・読みやすさの検査（qa/a11y.mjs。中身は qa-report/a11y.md）", a.status === 0, (a.stdout.match(/^- ❌.*$/gm) || []).join(" / ") || (a.status ? a.stderr.slice(-300) : ""));
+}
+
 
 const ng = results.filter((r) => !r.ok);
 const md = `# ひかり道 QA\n\n${results.map((r) => `- ${r.ok ? "✅" : "❌"} ${r.name}${r.detail ? `（${r.detail}）` : ""}`).join("\n")}\n\n${ng.length ? `❌ ${ng.length}件` : `✅ ${results.length}項目すべて通過`}\n`;
