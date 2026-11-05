@@ -29,6 +29,7 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(new Promise((resolve) => {
     let sent = false; const send = (r) => { if (!sent) { sent = true; resolve(r); } };
     const slow = setTimeout(() => fromCache().then((hit) => hit && send(hit)), 4000);
+    setTimeout(() => fromCache().then((hit) => send(hit || Response.error())), 60000); // 保存が無く通信も返らないときも、60秒で必ず返事をする（読み込み中のまま止めない。2026-11-05 CodeRabbit）
     net.then((res) => {
       clearTimeout(slow);
       if (res.ok) return send(res);

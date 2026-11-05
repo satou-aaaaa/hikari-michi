@@ -280,9 +280,9 @@ function valid(p, c) {
   for (const h of c.hint) { if (!Array.isArray(h) || h.length !== 2 || !Number.isInteger(h[0]) || !Number.isInteger(h[1]) || h[0] < 0 || h[0] >= p.H || h[1] < 0 || h[1] >= p.W) return false; const k = h[0] + ":" + h[1]; if (seen.has(k) || !c.put[h[0]][h[1]]) return false; seen.add(k); }
   return true;
 }
-const same = (r) => r && cur && r.date === cur.date && r.id === cur.id && r.res.length === cur.i;
-// 同じ問題で保存済みのほうが先なら、古いタブの置き方で上書きしない。同じ回数でも、保存済みのヒントの数は多いほうを残す（古いタブの保存で★を増やさない）
-function keep() { cur.moves++; save((s) => { const r = s.runs[MODE], old = r && r.cur && r.cur.i === cur.i ? r.cur : null; if (same(r) && !(old && old.moves > cur.moves)) { if (old) cur.hints = Math.max(cur.hints, old.hints || 0); r.cur = { i: cur.i, put: cur.put, hint: cur.hint, hints: cur.hints, moves: cur.moves }; } }); }
+const same = (r) => r && cur && r.date === cur.date && r.id === cur.id && r.res.length === cur.i && JSON.stringify(r.list[cur.i]) === JSON.stringify(cur.it);
+// 同じ問題で保存済みの回数が同じか多ければ、古いタブの置き方で上書きしない（ヒントの鏡と数をそのまま残す。2026-11-05 CodeRabbit）
+function keep() { cur.moves++; save((s) => { const r = s.runs[MODE], old = r && r.cur && r.cur.i === cur.i ? r.cur : null; if (same(r) && !(old && old.moves >= cur.moves)) { if (old) cur.hints = Math.max(cur.hints, old.hints || 0); r.cur = { i: cur.i, put: cur.put, hint: cur.hint, hints: cur.hints, moves: cur.moves }; } }); }
 const traced = () => T.trace(cur.p, cur.put);
 const isWin = () => T.solved(cur.p, cur.put);
 const nMirrors = () => T.count(cur.put);

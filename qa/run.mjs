@@ -82,7 +82,7 @@ const html = readFileSync(path.join(root, "index.html"), "utf8");
 check("終えた回を消すのは同じ回のときだけ・0時を過ぎたホームの「今日」のボタンは描き直す（2026-11-04 CodeRabbit）", /c\.date === run\.date && c\.id === run\.id\) s2\.runs\[MODE\] = null/.test(html) && /\$\("go-d"\)\.onclick = \(\) => \(k !== todayKey\(\) \? home\(\)/.test(html));
 check("別のタブで今日の分を終えたあと、古い画面から今日・上級をもう一度始めない（2026-11-04 CodeRabbit）", /\(mode === "d" && s\.days\[k\]\) \|\| \(mode === "h" && s\.hdays\[k\]\)\) return;/.test(html));
 check("README の URL のすぐ後ろに全角の字を続けない（Link check が URL の一部と読む。2026-11-04）", !/https?:\/\/[\x21-\x7e]*[^\x00-\x7f]/.test(readFileSync(new URL("../README.md", import.meta.url), "utf8").replace(/\]\(https?:\/\/[^)\s]+\)/g, "").replace(/<https?:\/\/[^>\s]+>/g, "")));
-check("別のタブで先に進んだ置き方を、古いタブの置き方で上書きしない（2026-11-04 CodeRabbit）", /!\(old && old\.moves > cur\.moves\)\)/.test(html));
+check("別のタブで先に進んだ（同じ回数の）置き方を、古いタブの置き方で上書きしない（2026-11-04・11-05 CodeRabbit）", /!\(old && old\.moves >= cur\.moves\)\)/.test(html));
 { // ひな形を写したリポジトリで、README・AGENTS.md に前のゲームの名前や URL が残らない（2026-11-05 CodeRabbit）
   const docs = ["README.md", "AGENTS.md", "manifest.webmanifest", "sw.js", "index.html"].map((f) => [f, readFileSync(path.join(root, f), "utf8")]);
   const left = docs.filter(([, t]) => /あみだ|amida|配達|しりとり|shiritori|ことばならべ|kotoba|words\.js|言葉帳|github\.io\/(?!hikari-michi\/)[a-z0-9-]+\//.test(t)).map(([f]) => f);
@@ -103,6 +103,7 @@ check("画面にお笑いの言葉を入れない（本物っぽく）", !/お�
   const local = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => "./" + m[1]);
   check("PWA：ネットの返事の保存は、イベントの中で waitUntil に預ける（遅れて届いた新しい版も保存できる）", /e\.waitUntil\(Promise\.race\(\[net\.then[^\n]*wait\(15000\)[^\n]*wait\(60000\)\]\)\)/.test(sw));
   check("PWA：sw.js は画面のファイルを全部保存し（画面が読むスクリプトも全部）、外へ何も送らない", need.concat(local).every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
+  check("PWA：保存が無く通信も返らなくても、60秒で必ず返事をする", /setTimeout\(\(\) => fromCache\(\)\.then\(\(hit\) => send\(hit \|\| Response\.error\(\)\)\), 60000\)/.test(sw));
   check("PWA：manifest にアイコン2つと名前がある", mf.name === "ひかり道" && mf.icons.length >= 2 && mf.start_url === "./");
   check("PWA：maskable のアイコンは絵を縮めた別の画像（丸く切られても欠けない。2026-11-05 CodeRabbit）", mf.icons.some((i) => i.purpose === "maskable" && i.src === "icon-512-maskable.png") && !mf.icons.some((i) => i.purpose === "maskable" && i.src === "icon-512.png")); }
 { // ホームの見本とアイコン：下向きの光を右へ曲げる鏡は「＼」（左上→右下の線）。2026-11-05 逆向きで描いていた（CodeRabbit）
@@ -298,12 +299,13 @@ try {
     const rz = await pz.evaluate(() => window.__hk.load().runs.d.res[0]);
     check("別のタブで保存したヒントの数を、古いタブで届けても消さない（★を増やさない）", rz && rz.m === 0 && rz.h === 2 && (await pz.locator(".verdict .stars .off").textContent()).length === 2, JSON.stringify(rz));
     await pz.close(); }
-  { // 同じ回数で古いタブが保存しても、保存済みのヒントの数を消さない
+  { // 同じ回数で古いタブが保存しても、保存済みのヒントの鏡と数を消さない（2026-11-05 CodeRabbit）
     const py = await newPage(); await py.click("#howto-ok"); await py.click("#go-d");
-    await py.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)), p = window.__hk.cur().p; s.runs.d.cur = { i: 0, put: p.cell.map((row) => row.map(() => 0)), hint: [], hints: 1, moves: 1 }; localStorage.setItem(k, JSON.stringify(s)); }, KEY);
-    await py.click(cellSel(...(await freeCell(py))));
+    const fc = await freeCell(py);
+    await py.evaluate(([k, fr, fcc]) => { const s = JSON.parse(localStorage.getItem(k)), p = window.__hk.cur().p; let hr = -1, hc = -1; for (let r = 0; r < p.H && hr < 0; r++) for (let c = 0; c < p.W; c++) if (p.cell[r][c] === 0 && !(r === fr && c === fcc)) { hr = r; hc = c; break; } const put = p.cell.map((row) => row.map(() => 0)); put[hr][hc] = 1; s.runs.d.cur = { i: 0, put, hint: [[hr, hc]], hints: 1, moves: 1 }; localStorage.setItem(k, JSON.stringify(s)); }, [KEY, fc[0], fc[1]]);
+    await py.click(cellSel(...fc));
     const ry = await py.evaluate(() => window.__hk.load().runs.d.cur);
-    check("同じ回数で古いタブが保存しても、保存済みのヒントの多いほうを残す", ry && ry.hints === 1 && ry.moves === 1 && nPut(ry.put) === 1, JSON.stringify(ry));
+    check("同じ回数で古いタブが保存しても、保存済みのヒントの鏡と数を残す（上書きしない）", ry && ry.hints === 1 && ry.moves === 1 && ry.hint.length === 1 && nPut(ry.put) === 1 && ry.put[ry.hint[0][0]][ry.hint[0][1]] === 1, JSON.stringify(ry));
     await py.close(); }
   { // 保存できないブラウザでも遊べる
     const pb = await browser.newPage({ viewport: { width: 390, height: 844 } });
