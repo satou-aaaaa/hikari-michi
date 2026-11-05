@@ -367,7 +367,7 @@ try {
     check("練習の上級（6×8）も、ヒントのボタンが無い", (await pn.locator("#hint").count()) === 0 && (await pn.evaluate(() => window.__hk.cur().hard)) === true);
     await pn.close(); }
   { // 引き継ぎコード（shared-workflows template/qa/transfer-check.mjs）
-    const sample = { "hikari-michi-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-04": { m: [0, 1, 0] } }, hdays: {}, cnt: { 0: 3, 1: 2 }, perf: {}, total: 5, runs: {}, kofi: {}, ach: {}, t: 1 }), "a11y-v1": JSON.stringify({ read: true }) };
+    const sample = { "hikari-michi-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-04": { m: [0, 1, 0] } }, hdays: {}, cnt: { 0: 3, 1: 2 }, perf: {}, total: 5, runs: {}, kofi: {}, ach: {}, t: 1 }) };
     await checkTransfer({ browser, url, game: "hikari-michi", sample, check, open: async (page) => { await page.evaluate(() => { const d = document.getElementById("howto"); if (d.open) d.close(); }); } });
   }
 } catch (e) {
