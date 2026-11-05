@@ -59,6 +59,8 @@ button.sub:disabled{opacity:.4;cursor:default}
 .board .hit:focus-visible{outline:none;fill:#ffd45a22}
 .board .beam{filter:drop-shadow(0 0 4px #ffd45a)}
 .board.win .beam{stroke:#fff6c8}
+/* 色の見分けを助ける：動かせないヒントの鏡は破線にして、色を見なくても分かるようにする（2026-11-05 CodeRabbit） */
+html.a11y-cvd .board .mirror.hint line{stroke-dasharray:12 6;stroke-linecap:butt}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;font-size:12px;color:var(--ink2)}
 .legend b{font-weight:800}
 .status{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--ink2);min-height:22px}
@@ -474,7 +476,7 @@ function board() {
     out.push(`<polygon class="gem${lit ? " lit" : ""}" points="${f(cx)},${f(cy - h)} ${f(cx + h)},${f(cy)} ${f(cx)},${f(cy + h)} ${f(cx - h)},${f(cy)}" fill="${GEMC[i % GEMC.length]}" fill-opacity="${lit ? 1 : 0.35}" stroke="${lit ? "#fff" : GEMC[i % GEMC.length]}" stroke-width="${lit ? 2 : 1.5}"${lit ? ` style="filter:drop-shadow(0 0 6px ${GEMC[i % GEMC.length]})"` : ""}/>`);
   });
   // 置いた鏡（ヒントの鏡は金）
-  for (let r = 0; r < p.H; r++) for (let c = 0; c < p.W; c++) if (cur.put[r][c]) out.push(`<g class="mirror">${mirrorLine(cur.put[r][c], G.x(c), G.y(r), cs * 0.34, has(cur.hint, r, c) ? "#ffcf4a" : "#dfe6f5", 5)}</g>`);
+  for (let r = 0; r < p.H; r++) for (let c = 0; c < p.W; c++) if (cur.put[r][c]) out.push(`<g class="mirror${has(cur.hint, r, c) ? " hint" : ""}">${mirrorLine(cur.put[r][c], G.x(c), G.y(r), cs * 0.34, has(cur.hint, r, c) ? "#ffcf4a" : "#dfe6f5", 5)}</g>`);
   // 明かりと出口
   out.push(`<circle class="lamp" cx="${f(G.pad * 0.45)}" cy="${f(G.y(p.lr))}" r="6" fill="#ffd45a"/>`);
   const g = p.goal, gx = G.x(g.c) + T.DX[g.d] * (cs / 2 + G.pad * 0.55), gy = G.y(g.r) + T.DY[g.d] * (cs / 2 + G.pad * 0.55), win = T.isGoal(p, t.end) && t.gems.size === p.gems.length;

@@ -206,6 +206,8 @@ try {
   await page.click("#hint");
   n1 = await curT(page);
   check("ヒント2回目でもう1枚、ヒントはもう押せない", n1.hints === 2 && n1.hint.length === 2 && (await page.locator("#hint[disabled]").count()) === 1);
+  { const dash = await page.evaluate(() => { const h = document.documentElement, had = h.classList.contains("a11y-cvd"), ln = () => document.querySelector("#board .mirror.hint line"); h.classList.remove("a11y-cvd"); const off = ln() ? getComputedStyle(ln()).strokeDasharray : "x"; h.classList.add("a11y-cvd"); const on = ln() ? getComputedStyle(ln()).strokeDasharray : "none"; if (!had) h.classList.remove("a11y-cvd"); return { n: document.querySelectorAll("#board .mirror.hint").length, off, on }; });
+    check("ヒントの鏡に印（hint）が付き、色の見分けを助ける設定では破線になる（色だけで分けない。2026-11-05 CodeRabbit）", dash.n === 2 && dash.off === "none" && dash.on !== "none", JSON.stringify(dash)); }
   await page.reload(); await page.click("#go-d");
   n1 = await curT(page);
   check("途中で閉じても、置いた鏡・ヒントはそのまま（続きから）", n1.hints === 2 && n1.hint.length === 2 && nPut(n1.put) === 2 && (await page.textContent("#left")).includes("ヒント 2"));
