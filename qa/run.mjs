@@ -60,6 +60,8 @@ function anyWith(p, k) {
       if ((lv === 0 && s < 200) || (lv === 1 && s < 60)) { if (anyWith(p, p.d - 1)) brute.push(`${L.name}:${s}:${p.d}`); }
       // ヒント：答えの鏡を1枚動かさなくしても、残りはちょうど d−1 枚
       if (s < 60) { const fx = p.sol.map((row) => row.map(() => 0)); outer: for (let r = 0; r < p.H; r++) for (let c = 0; c < p.W; c++) if (p.sol[r][c]) { fx[r][c] = p.sol[r][c]; break outer; } const h = T.solve(p, fx, 20); if (!h || h.d !== p.d - 1 || !goes(p, h.put)) hintBad.push(`${L.name}:${s}`); }
+      // ヒントで答えの鏡を全部動かさなくしたら、残りは0枚（動かせない鏡を下限に数えない。2026-11-05 CodeRabbit）
+      if (s < 40) { const h = T.solve(p, p.sol, 20); if (!h || h.d !== 0) hintBad.push(`${L.name}:${s}:全部`); }
       if (s < 30 && JSON.stringify(T.make(seed, L)) !== JSON.stringify(p)) same.push(`${L.name}:${s}`);
       dist[L.name] = dist[L.name] || {}; dist[L.name][p.d] = (dist[L.name][p.d] || 0) + 1;
     }
@@ -97,16 +99,20 @@ check("画面にお笑いの言葉を入れない（本物っぽく）", !/お�
   check("感想フォームは名前・メールを聞かない（楽しさ・よかった所・直してほしい所だけ）・フォーム名は4字以上（3字以下だと GitHub がフォームを出さない。2026-11-05 CodeRabbit）", [...((fy.match(/^name: (.+)$/m) || [])[1] || "")].length > 3 && /id: fun/.test(fy) && /id: good/.test(fy) && /id: fix/.test(fy) && !/id: (name|email|mail)/.test(fy)); }
 { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1].replace(/'/g, '"'));
-  const need = ["./index.html", "./gen.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
+  const need = ["./index.html", "./gen.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png"];
   const local = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => "./" + m[1]);
   check("PWA：ネットの返事の保存は、イベントの中で waitUntil に預ける（遅れて届いた新しい版も保存できる）", /e\.waitUntil\(Promise\.race\(\[net\.then[^\n]*wait\(15000\)[^\n]*wait\(60000\)\]\)\)/.test(sw));
   check("PWA：sw.js は画面のファイルを全部保存し（画面が読むスクリプトも全部）、外へ何も送らない", need.concat(local).every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
-  check("PWA：manifest にアイコン2つと名前がある", mf.name === "ひかり道" && mf.icons.length >= 2 && mf.start_url === "./"); }
+  check("PWA：manifest にアイコン2つと名前がある", mf.name === "ひかり道" && mf.icons.length >= 2 && mf.start_url === "./");
+  check("PWA：maskable のアイコンは絵を縮めた別の画像（丸く切られても欠けない。2026-11-05 CodeRabbit）", mf.icons.some((i) => i.purpose === "maskable" && i.src === "icon-512-maskable.png") && !mf.icons.some((i) => i.purpose === "maskable" && i.src === "icon-512.png")); }
+{ // ホームの見本とアイコン：下向きの光を右へ曲げる鏡は「＼」（左上→右下の線）。2026-11-05 逆向きで描いていた（CodeRabbit）
+  const ic = readFileSync(path.join(root, "tools/make-icons.cjs"), "utf8");
+  check("ホームの見本とアイコンの鏡の向きが光の曲がり方と合う（下→右は「＼」）", /<line x1="97" y1="79" x2="123" y2="105"\/>/.test(html) && /<line x1="52" y1="64" x2="72" y2="84"\/>/.test(ic)); }
 { const src = html + readFileSync(path.join(root, "gen.js"), "utf8");
   const bad = src.match(/\.sort\(\s*\([^)]*\)\s*=>[^\n;]*\b(R|rng|rand|Math\.random)\s*\(/g) || [];
   check("並べ替えの比較の中で乱数を引いていない（同じ日に人によって問題が変わらない）", bad.length === 0, bad.join(" | ")); }
 
-const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+let browser = null; // 起動に失敗しても report.md を書けるように、起動は下の try の中で
 const isNoise = (t) => /fonts\.(googleapis|gstatic)\.com|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|net::ERR_/.test(t);
 const errors = [];
 const FIXED = new Date(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) + "T03:00:00Z");
@@ -138,6 +144,7 @@ async function solveNow(page) {
 }
 const KEY = "hikari-michi-v1";
 try {
+  browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const page = await newPage();
   // 2. 3問の組み方（日付の種）
   const sel = await page.evaluate(() => {
@@ -340,18 +347,22 @@ try {
     check("保存に失敗したタブの時刻が進んでいても、別のタブで先に進んだ途中経過を古いメモリで戻さない", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(), base = { mode: "d", date: "2000-01-01", list: [{ seed: 1, lv: 0, idx: 0 }], id: "x", res: [] }; mem = JSON.stringify(Object.assign({}, s0, { t: 99, runs: { d: Object.assign({}, base) } })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: 1, runs: { d: Object.assign({}, base, { res: [{ m: 0, h: 0 }] }) } }))); const r = g.load(); mem = null; return r.runs.d.res.length === 1; }, KEY));
     check("保存に失敗したタブにだけある途中経過は、別のタブが保存しても消さない（その日を終えた記録があれば null を使う・終えた回は日ごとの結果に残す）", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(); const base = { mode: "d", date: "2000-01-01", list: [1, 2, 3], tags: [1, 2, 3], id: "x", res: [], i: 0, hints: [0, 0, 0] }, done = Object.assign({}, base, { res: [0, 1, 2].map(() => ({ m: 0, g: 1, h: 0, f: 0, p: 90, n: 1 })), i: 3 }); const put = (a, b, dd) => { mem = JSON.stringify(Object.assign({}, s0, { t: 5, runs: a })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: 9, runs: b }, dd ? { days: Object.assign({}, s0.days, dd) } : {}))); const r = g.load(); mem = null; return r; }; const r1 = put({ d: base }, {}), r2 = put({ d: base }, { d: null }, { "2000-01-01": 1 }), r3 = put({ d: base }, { d: null }), r4 = put({ d: done }, { d: null }); return !!r1.runs.d && r1.runs.d.date === "2000-01-01" && r2.runs.d === null && !!r3.runs.d && r3.runs.d.date === "2000-01-01" && r4.runs.d === null && !!r4.days["2000-01-01"]; }, KEY));
     check("同じ進み具合なら、新しく保存したほうの途中経過を使う", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(); const base = { mode: "d", date: "2000-01-01", list: [1, 2, 3], tags: [1, 2, 3], id: "x", res: [], i: 0, hints: [0, 0, 0] }, done = Object.assign({}, base, { res: [0, 1, 2].map(() => ({ m: 0, g: 1, h: 0, f: 0, p: 90, n: 1 })), i: 3 }); const put = (ta, tb) => { mem = JSON.stringify(Object.assign({}, s0, { t: ta, runs: { d: Object.assign({}, base, { zz: "a" }) } })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: tb, runs: { d: Object.assign({}, base, { zz: "b" }) } }))); const r = g.load(); mem = null; return r.runs.d.zz; }; return put(9, 5) === "a" && put(5, 9) === "b"; }, KEY));
+    check("同じだけ進んだ途中経過どうしなら、ヒントの数は多いほうを残す（2026-11-05 CodeRabbit）", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(), base = { mode: "d", date: "2000-01-01", list: [1, 2, 3], id: "x", res: [] }, cu = (h) => ({ i: 0, put: [], hint: [], hints: h, moves: 4 }); mem = JSON.stringify(Object.assign({}, s0, { t: 5, runs: { d: Object.assign({}, base, { cur: cu(2) }) } })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: 9, runs: { d: Object.assign({}, base, { cur: cu(0) }) } }))); const r = g.load(); mem = null; return r.runs.d.cur.hints === 2; }, KEY));
     check("結果を見る前に別のタブが次の日を保存しても、終えた日の記録を残す", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(); const base = { mode: "d", date: "2000-01-01", list: [1, 2, 3], tags: [1, 2, 3], id: "x", res: [], i: 0, hints: [0, 0, 0] }, done = Object.assign({}, base, { res: [0, 1, 2].map(() => ({ m: 0, g: 1, h: 0, f: 0, p: 90, n: 1 })), i: 3 }); mem = JSON.stringify(Object.assign({}, s0, { t: 5, runs: { d: done } })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: 9, runs: { d: Object.assign({}, base, { date: "2000-01-02" }) } }))); const r = g.load(); mem = null; return !!r.days["2000-01-01"] && r.runs.d.date === "2000-01-02"; }, KEY));
     check("同じ問題の練習をやり直したら、前の回（終えたもの）と取り違えず新しい回を使う", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(), base = { mode: "p", date: "2000-01-01", list: [1], tags: [1], res: [], i: 0, hints: [] }; mem = JSON.stringify(Object.assign({}, s0, { t: 9, runs: { p: Object.assign({}, base, { id: "new" }) } })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: 5, runs: { p: Object.assign({}, base, { id: "old", res: [{}], i: 1 }) } }))); const r = g.load(); mem = null; return r.runs.p.id === "new"; }, KEY));
     check("時計が戻っても、保存の時刻 t は前より大きくなる", await pn.evaluate((K) => { const s0 = JSON.parse(localStorage.getItem(K)); const far = Date.now() + 1e9; localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: far }))); save(() => {}); return JSON.parse(localStorage.getItem(K)).t > far; }, KEY));
     check("進み具合は終えた問題の数を先に比べる（鏡を動かした回数が多くても、終えた問題のある記録を消さない）", await pn.evaluate((K) => { const g = window.__hk, s0 = g.load(), base = { mode: "d", date: "2000-01-01", list: [{ seed: 1, lv: 0, idx: 0 }, { seed: 2, lv: 0, idx: 1 }], id: "x" }; mem = JSON.stringify(Object.assign({}, s0, { t: 9, runs: { d: Object.assign({}, base, { res: [], cur: { i: 0, put: [], hint: [], hints: 0, moves: 1500 } }) } })); localStorage.setItem(K, JSON.stringify(Object.assign({}, s0, { t: 5, runs: { d: Object.assign({}, base, { res: [{ m: 0, h: 0 }], cur: null }) } }))); const r = g.load(); mem = null; return r.runs.d.res.length === 1; }, KEY));
-    check("できたときに別のタブで回が変わって保存できなかったら、できた画面を出さない", await pn.evaluate(() => /let saved = false/.test(deliver.toString()) && /if \(!saved\)/.test(deliver.toString())));
+    { // できたときの確かめ（1回目の読み）と保存の読み直し（2回目）のあいだに別のタブが新しい回を保存した状態を作り、できた画面が出ないことを動きで見る（2026-11-05 CodeRabbit）
+      await pn.evaluate(() => { location.hash = ""; }); await pn.reload(); await pn.click("#go-p"); await pn.click('.lv button[data-lv="0"]');
+      const r = await pn.evaluate((K) => { const g = window.__hk, c = g.cur(); const sol = g.T.solve(c.p, null, 20).put; c.put = sol.map((x) => x.slice()); const orig = Storage.prototype.getItem; let n = 0; Storage.prototype.getItem = function (k) { const v = orig.call(this, k); if (k !== K || ++n < 2) return v; const s = JSON.parse(v); s.runs.p = Object.assign({}, s.runs.p, { id: "other-tab" }); return JSON.stringify(s); }; try { g.deliver(); } finally { Storage.prototype.getItem = orig; } return { n, verdict: !!document.querySelector(".verdict"), done: g.cur().done }; }, KEY);
+      check("できたときに別のタブで回が変わって保存できなかったら、できた画面を出さない", r.n >= 2 && !r.verdict && !r.done, JSON.stringify(r)); }
     await pn.evaluate(() => { location.hash = ""; }); await pn.reload(); await pn.click("#go-p"); await pn.click('.lv button[data-lv="3"]');
     check("練習の上級（6×8）も、ヒントのボタンが無い", (await pn.locator("#hint").count()) === 0 && (await pn.evaluate(() => window.__hk.cur().hard)) === true);
     await pn.close(); }
 } catch (e) {
   check("QA の操作が最後まで完了する", false, e.message.split("\n")[0]);
 } finally {
-  await browser.close();
+  if (browser) await browser.close();
 }
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
 

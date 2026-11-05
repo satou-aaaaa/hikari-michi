@@ -70,8 +70,8 @@
     const h0 = R.D[R.idx(p.lr, 0, 0, 0)];
     if (h0 === 255) return null;
     const lo = (h0 + 1) >> 1;
-    const dec = new Map(); // ます → 0（まっすぐ）・1・2
-    if (fixed) for (let r = 0; r < p.H; r++) for (let c = 0; c < p.W; c++) if (fixed[r] && fixed[r][c]) dec.set(r * p.W + c, fixed[r][c]);
+    const dec = new Map(), fx = new Set(); // ます → 0（まっすぐ）・1・2。fx：ヒントで動かせない鏡（数に入らないので refl にも数えない）
+    if (fixed) for (let r = 0; r < p.H; r++) for (let c = 0; c < p.W; c++) if (fixed[r] && fixed[r][c]) { dec.set(r * p.W + c, fixed[r][c]); fx.add(r * p.W + c); }
     let found = null;
     function dfs(r, c, d, m, used, refl, budget, seen) {
       for (;;) {
@@ -97,7 +97,7 @@
           return false;
         }
         seen.add(key);
-        if (v === 0 && dec.get(cell)) refl++;
+        if (v === 0 && dec.get(cell) && !fx.has(cell)) refl++;
         d = turn(d, v === 0 ? dec.get(cell) : mirrorOf(v, 0));
         r += DY[d]; c += DX[d];
       }
@@ -148,6 +148,7 @@
       if (gems.length < L.gem) continue;
       // 岩：道の外に
       const off = []; for (let rr = 0; rr < L.H; rr++) for (let cc = 0; cc < L.W; cc++) if (!used.has(rr * L.W + cc)) off.push([rr, cc]);
+      if (off.length < L.rock) continue;
       for (let k = 0; k < L.rock && off.length; k++) { const x = off.splice(Math.floor(R() * off.length), 1)[0]; cell[x[0]][x[1]] = 1; }
       gems.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
       const p = { W: L.W, H: L.H, lr, cell, gems, goal, name: L.name };
