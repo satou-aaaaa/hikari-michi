@@ -177,6 +177,8 @@ try {
   await page.keyboard.press("Escape"); await page.waitForTimeout(100); check("遊び方を Esc で閉じられる", await page.locator("#howto[open]").count() === 0);
   await page.reload(); await page.waitForTimeout(200); check("遊び方を Esc で閉じても、開き直したとき出ない", await page.locator("#howto[open]").count() === 0);
   await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(200); await page.click("#howto-ok"); await page.reload(); await page.waitForTimeout(200); check("遊び方を「わかった」で閉じてすぐ読み直しても出ない", await page.locator("#howto[open]").count() === 0);
+  { let again = 0; for (let i = 0; i < 10; i++) { await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(200); await page.keyboard.press("Escape"); await page.reload(); await page.waitForTimeout(200); again += await page.locator("#howto[open]").count(); } check("遊び方を Esc で閉じてすぐ読み直しても出ない（10回）", again === 0); }
+  await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(200); check("「わかった」を押したその場で「見た」が残る", await page.locator("#howto-ok").evaluate((b) => { b.click(); return Object.keys(localStorage).some((k) => { try { return JSON.parse(localStorage.getItem(k)).tut === true; } catch { return false; } }); }));
   await page.click("#go-d");
   let c = await curT(page);
   check("1問目は5×5の部屋：押す所25・宝石・明かり・出口が出て、届けるボタンは押せない・いちばん少ない鏡の数が出る", (await page.locator("#board rect.hit").count()) === 25 && (await page.locator("#board .gem").count()) === c.p.gems.length && (await page.locator("#board .lamp").count()) === 1 && (await page.locator("#board .goal").count()) === 1 && (await page.locator("#answer[disabled]").count()) === 1 && (await page.textContent("#ask")).includes(`${c.p.d}枚`));
